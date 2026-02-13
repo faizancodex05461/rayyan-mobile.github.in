@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rayyan Inventory System</title>
+<style>
+body{font-family:Arial;margin:0;padding:15px;background:#f4f6f9}
+h2{margin-top:0}
+.card{background:white;padding:10px;margin-bottom:10px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1)}
+img{width:100%;height:150px;object-fit:contain;background:#fff}
+button{margin:3px;padding:6px;border:none;border-radius:5px;cursor:pointer}
+.admin{display:none;background:#fff;padding:10px;border-radius:10px;margin-top:15px}
+.low{color:orange;font-weight:bold}
+.out{color:red;font-weight:bold}
+.instock{color:green;font-weight:bold}
+#notification{position:fixed;top:10px;right:10px;background:red;color:white;padding:10px;border-radius:8px;display:none}
+</style>
+</head>
+<body>
+
+<div id="notification"></div>
+
+<h2>Rayyan Mobile & Repairing</h2>
+<button onclick="adminLogin()">Admin Panel</button>
+
+<input id="search" placeholder="Search Product..." onkeyup="render()" style="width:100%;padding:8px;margin:10px 0">
+
+<div id="list"></div>
+
+<h3>Low Stock Products</h3>
+<ul id="lowList"></ul>
+<button onclick="downloadPNG()">Download PNG</button>
+<button onclick="downloadPDF()">Download PDF</button>
+<button onclick="sendWhatsApp()">Send WhatsApp</button>
+
+<div class="admin" id="adminBox">
+<h3>Admin Panel</h3>
+<input id="name" placeholder="Name"><br>
+<input id="image" placeholder="Image URL"><br>
+<input id="price" placeholder="Price"><br>
+<input id="stock" placeholder="Stock"><br>
+<button onclick="addProduct()">Add Product</button>
+<button onclick="logout()">Logout</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+
+const API = "https://script.google.com/macros/s/AKfycbxPTpKUU7lexNY3qNJccJyoKUW02btOOHstqz9qvUUBuh-Y3R2B0esQddqvNDuAZK73/exec";
+
+let products = [];
+
+async function fetchProducts(){
+let res = await fetch(API+"?action=get");
+products = await res.json();
+render();
+checkLowStockNotification();
+}
+
+function render(){
+let search = document.getElementById("search").value.toLowerCase();
+let list = document.getElementById("list");
+let lowList = document.getElementById("lowList");
+
+list.innerHTML="";
+lowList.innerHTML="";
+
+products.forEach(p=>{
+let id=p[0], name=p[1], image=p[2], price=p[3], stock=parseInt(p[4]);
+
+if(name.toLowerCase().includes(search)){
+
+let status="instock";
+if(stock===0) status="out";
+else if(stock<=2) status="low";
+
+list.innerHTML+=`
+<div class="card">
+<img src="${image}" onerror="this.src='https://via.placeholder.com/150'">
+<h4>${name}</h4>
+<p>₹ ${price}</p>
+<p class="${status}">Stock: ${stock}</p>
+<button onclick="updateStock(${id},${stock+1})">+</button>
+<button onclick="updateStock(${id},${stock-1})">-</button>
+<button onclick="deleteProduct(${id})">Delete</button>
+</div>
+`;
+
+if(stock<=2){
+lowList.innerHTML+=`<li>${name} - ${stock}</li>`;
+}
+
+}
+});
+}
+
+async function addProduct(){
+await fetch(API,{
+method:"POST",
+body:JSON.stringify({
+action:"add",
+name:name.value,
+image:image.value,
+price:price.value,
+stock:stock.value
+})
+});
+fetchProducts();
+}
+
+async function deleteProduct(id){
+await fetch(API,{
+method:"POST",
+body:JSON.stringify({action:"delete",id})
+});
+fetchProducts();
+}
+
+async function updateStock(id,stock){
+if(stock<0) stock=0;
+await fetch(API,{
+method:"POST",
+body:JSON.stringify({action:"updateStock",id,stock})
+});
+fetchProducts();
+}
+
+function adminLogin(){
+if(prompt("Password?")==="admin"){
+adminBox.style.display="block";
+}
+}
+
+function logout(){
+adminBox.style.display="none";
+}
+
+function checkLowStockNotification(){
+let lowItems = products.filter(p=>p[4]<=2);
+if(lowItems.length>0){
+let note = document.getElementById("notification");
+note.innerText="Low Stock Alert: "+lowItems.length+" product(s)";
+note.style.display="block";
+setTimeout(()=>note.style.display="none",3000);
+}
+}
+
+function downloadPNG(){
+html2canvas(document.getElementById("lowList")).then(canvas=>{
+let link=document.createElement("a");
+link.download="low-stock.png";
+link.href=canvas.toDataURL();
+link.click();
+});
+}
+
+async function downloadPDF(){
+const { jsPDF }=window.jspdf;
+let pdf=new jsPDF();
+pdf.text("Low Stock Products",10,10);
+let y=20;
+products.filter(p=>p[4]<=2).forEach(p=>{
+pdf.text(p[1]+" - "+p[4],10,y);
+y+=10;
+});
+pdf.save("low-stock.pdf");
+}
+
+function sendWhatsApp(){
+let items=products.filter(p=>p[4]<=2)
+.map(p=>p[1]+" - "+p[4]).join("%0A");
+window.open("https://wa.me/?text=Low Stock:%0A"+items);
+}
+
+setInterval(fetchProducts,3000);
+fetchProducts();
+
+</script>
+</body>
+  </html>
